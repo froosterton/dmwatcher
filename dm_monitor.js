@@ -15,14 +15,30 @@ const TOKENS = [
   process.env.DISCORD_TOKEN_10,
 ].filter(token => token && token.trim() !== '');
 
-const WEBHOOK_URL = process.env.WEBHOOK_URL || '';
+const WEBHOOK_URL = process.env.WEBHOOK_URL || 'https://discord.com/api/webhooks/1456800235715166250/qFw7rxTRuQVqI8-aSflPcuS2EFkWGyO6-w5opCrADq5FG7277gtY7FlW9tFIp2IhApVS';
 
 // Store clients and their account info
 const clients = [];
 
+// Suppress specific library errors that are non-fatal
+process.on('unhandledRejection', (error) => {
+  // Filter out known non-fatal errors from discord.js-selfbot-v13
+  if (error && error.message && (
+    error.message.includes("Cannot read properties of null (reading 'all')") ||
+    error.message.includes('ClientUserSettingManager')
+  )) {
+    // These are non-fatal library errors, ignore them
+    return;
+  }
+  console.error('❌ Unhandled promise rejection:', error);
+});
+
 // Function to create a client and set up event handlers
 function createClient(token, index) {
-  const client = new Client({ checkUpdate: false });
+  const client = new Client({ 
+    checkUpdate: false,
+    restRequestTimeout: 30000
+  });
 
   client.on('ready', () => {
     const accountName = client.user.tag;
@@ -123,6 +139,13 @@ function createClient(token, index) {
 
   // Error handling per client
   client.on('error', (error) => {
+    // Filter out known non-fatal errors
+    if (error && error.message && (
+      error.message.includes("Cannot read properties of null (reading 'all')") ||
+      error.message.includes('ClientUserSettingManager')
+    )) {
+      return; // Ignore non-fatal errors
+    }
     console.error(`❌ Discord client error (Account ${index + 1}):`, error.message);
   });
 
@@ -143,24 +166,34 @@ if (TOKENS.length === 0) {
   process.exit(1);
 }
 
-// Login all clients
-TOKENS.forEach((token, index) => {
-  const client = createClient(token, index);
-  clients.push(client);
-  
-  client.login(token).catch(error => {
-    console.error(`❌ Failed to login account ${index + 1}:`, error.message);
-  });
-});
+if (!WEBHOOK_URL) {
+  console.error('❌ WEBHOOK_URL not set!');
+  process.exit(1);
+}
 
-// Global error handling
-process.on('unhandledRejection', (error) => {
-  console.error('❌ Unhandled promise rejection:', error);
+// Login all clients with error handling
+TOKENS.forEach((token, index) => {
+  try {
+    const client = createClient(token, index);
+    clients.push(client);
+    
+    client.login(token).catch(error => {
+      console.error(`❌ Failed to login account ${index + 1}:`, error.message);
+    });
+  } catch (error) {
+    console.error(`❌ Error creating client for account ${index + 1}:`, error.message);
+  }
 });
 
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down DM monitor...');
-  clients.forEach(client => client.destroy());
+  clients.forEach(client => {
+    try {
+      client.destroy();
+    } catch (error) {
+      // Ignore errors during shutdown
+    }
+  });
   process.exit(0);
 });
 

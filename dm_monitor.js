@@ -19,6 +19,20 @@ const WEBHOOK_URL = process.env.WEBHOOK_URL || 'https://discord.com/api/webhooks
 
 // Store clients and their account info
 const clients = [];
+let readyCount = 0;
+
+// Test webhook on startup
+async function testWebhook() {
+  try {
+    await axios.post(WEBHOOK_URL, {
+      content: '🔔 DM Monitor started! Waiting for DMs...'
+    });
+    console.log('✅ Webhook test successful\n');
+  } catch (error) {
+    console.error('❌ Webhook test failed:', error.message);
+    console.error('   Please check your WEBHOOK_URL\n');
+  }
+}
 
 // Suppress specific library errors that are non-fatal
 process.on('unhandledRejection', (error) => {
@@ -48,112 +62,127 @@ function createClient(token, index) {
   client.on('ready', () => {
     try {
       isReady = true;
+      readyCount++;
       const accountName = client.user.tag;
       console.log(`✅ Account ${index + 1} ready: ${accountName}`);
     } catch (error) {
+      readyCount++;
       console.log(`✅ Account ${index + 1} ready (username fetch failed)`);
     }
   });
 
   client.on('messageCreate', async (message) => {
-    // Only process DMs (messages in DM channels, not guild channels)
-    if (message.guild) {
-      return; // Skip messages from servers
-    }
-
-    // Skip messages from bots (optional - remove if you want to see bot messages)
-    if (message.author.bot) {
-      return;
-    }
-
-    // Get current time
-    const timestamp = new Date().toLocaleString('en-US', {
-      timeZone: 'America/New_York',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true
-    });
-
-    // Get user info
-    const authorTag = message.author.tag;
-    const authorId = message.author.id;
-    const content = message.content || '*[No text content]*';
-
-    // Get account info
-    let accountName = `Account ${index + 1}`;
-    let accountAvatar = '';
-    
     try {
-      if (client.user) {
-        accountName = client.user.tag;
-        accountAvatar = client.user.displayAvatarURL({ dynamic: true, size: 256 });
-      }
-    } catch (error) {
-      // Fallback if user info unavailable
-    }
-
-    // Log the DM to console
-    console.log('═'.repeat(60));
-    console.log(`📩 NEW DM RECEIVED`);
-    console.log(`📱 Account: ${accountName} (Account ${index + 1})`);
-    console.log(`⏰ Time: ${timestamp}`);
-    console.log(`👤 From: ${authorTag} (ID: ${authorId})`);
-    console.log(`💬 Content:`);
-    console.log(content);
-    console.log('═'.repeat(60));
-    console.log('');
-
-    // Send webhook with embed
-    try {
-      const embed = {
-        title: `On ${accountName}`,
-        color: 0x5865F2,
-        fields: [
-          {
-            name: 'From',
-            value: `${authorTag} (${authorId})`,
-            inline: false
-          },
-          {
-            name: 'Content',
-            value: content.length > 1024 ? content.substring(0, 1021) + '...' : content,
-            inline: false
-          }
-        ],
-        timestamp: new Date().toISOString(),
-        footer: {
-          text: `Received at ${timestamp}`
-        }
-      };
-
-      if (accountAvatar) {
-        embed.thumbnail = { url: accountAvatar };
+      console.log(`[DEBUG] Message received on account ${index + 1}, Guild: ${message.guild ? 'Yes' : 'No (DM)'}`);
+      
+      // Only process DMs (messages in DM channels, not guild channels)
+      if (message.guild) {
+        return; // Skip messages from servers
       }
 
-      // Add attachment info if present
-      if (message.attachments.size > 0) {
-        const attachmentList = Array.from(message.attachments.values())
-          .map((att, idx) => `${idx + 1}. ${att.name || 'Unnamed'}`)
-          .join('\n');
-        embed.fields.push({
-          name: `Attachments (${message.attachments.size})`,
-          value: attachmentList.length > 1024 ? attachmentList.substring(0, 1021) + '...' : attachmentList,
-          inline: false
-        });
+      // Skip messages from bots (optional - remove if you want to see bot messages)
+      if (message.author.bot) {
+        return;
       }
 
-      // Send webhook
-      await axios.post(WEBHOOK_URL, {
-        embeds: [embed]
+      console.log(`[DEBUG] Processing DM from ${message.author.tag} on account ${index + 1}`);
+
+      // Get current time
+      const timestamp = new Date().toLocaleString('en-US', {
+        timeZone: 'America/New_York',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
       });
 
-      console.log(`✅ Sent webhook notification for ${accountName}`);
+      // Get user info
+      const authorTag = message.author.tag;
+      const authorId = message.author.id;
+      const content = message.content || '*[No text content]*';
+
+      // Get account info
+      let accountName = `Account ${index + 1}`;
+      let accountAvatar = '';
+      
+      try {
+        if (client.user) {
+          accountName = client.user.tag;
+          accountAvatar = client.user.displayAvatarURL({ dynamic: true, size: 256 });
+        }
+      } catch (error) {
+        // Fallback if user info unavailable
+      }
+
+      // Log the DM to console
+      console.log('═'.repeat(60));
+      console.log(`📩 NEW DM RECEIVED`);
+      console.log(`📱 Account: ${accountName} (Account ${index + 1})`);
+      console.log(`⏰ Time: ${timestamp}`);
+      console.log(`👤 From: ${authorTag} (ID: ${authorId})`);
+      console.log(`💬 Content:`);
+      console.log(content);
+      console.log('═'.repeat(60));
+      console.log('');
+
+      // Send webhook with embed
+      try {
+        const embed = {
+          title: `On ${accountName}`,
+          color: 0x5865F2,
+          fields: [
+            {
+              name: 'From',
+              value: `${authorTag} (${authorId})`,
+              inline: false
+            },
+            {
+              name: 'Content',
+              value: content.length > 1024 ? content.substring(0, 1021) + '...' : content,
+              inline: false
+            }
+          ],
+          timestamp: new Date().toISOString(),
+          footer: {
+            text: `Received at ${timestamp}`
+          }
+        };
+
+        if (accountAvatar) {
+          embed.thumbnail = { url: accountAvatar };
+        }
+
+        // Add attachment info if present
+        if (message.attachments.size > 0) {
+          const attachmentList = Array.from(message.attachments.values())
+            .map((att, idx) => `${idx + 1}. ${att.name || 'Unnamed'}`)
+            .join('\n');
+          embed.fields.push({
+            name: `Attachments (${message.attachments.size})`,
+            value: attachmentList.length > 1024 ? attachmentList.substring(0, 1021) + '...' : attachmentList,
+            inline: false
+          });
+        }
+
+        // Send webhook
+        console.log(`[DEBUG] Sending webhook for account ${index + 1}...`);
+        await axios.post(WEBHOOK_URL, {
+          embeds: [embed]
+        });
+
+        console.log(`✅ Sent webhook notification for ${accountName}`);
+      } catch (error) {
+        console.error(`❌ Error sending webhook for ${accountName}:`, error.message);
+        if (error.response) {
+          console.error(`   Status: ${error.response.status}`);
+          console.error(`   Response: ${JSON.stringify(error.response.data)}`);
+        }
+      }
     } catch (error) {
-      console.error(`❌ Error sending webhook for ${accountName}:`, error.message);
+      console.error(`❌ Error processing message on account ${index + 1}:`, error.message);
     }
   });
 
@@ -191,6 +220,9 @@ if (!WEBHOOK_URL) {
   process.exit(1);
 }
 
+// Test webhook first
+testWebhook();
+
 // Login all clients with error handling
 TOKENS.forEach((token, index) => {
   try {
@@ -208,6 +240,12 @@ TOKENS.forEach((token, index) => {
   }
 });
 
+// Wait a bit then show status
+setTimeout(() => {
+  console.log(`\n📈 Status: ${readyCount}/${TOKENS.length} accounts ready`);
+  console.log('🔔 Monitoring DMs on all accounts...\n');
+}, 5000);
+
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down DM monitor...');
   clients.forEach(client => {
@@ -219,6 +257,3 @@ process.on('SIGINT', async () => {
   });
   process.exit(0);
 });
-
-console.log('\n🔔 Monitoring DMs on all accounts...\n');
-console.log('💡 Tip: The bot is running. Accounts may log in even if "ready" messages don\'t appear.\n');

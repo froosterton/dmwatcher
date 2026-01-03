@@ -30,7 +30,10 @@ process.on('unhandledRejection', (error) => {
     // These are non-fatal library errors, ignore them
     return;
   }
-  console.error('❌ Unhandled promise rejection:', error);
+  // Only log other errors
+  if (error && error.stack && !error.stack.includes('ClientUserSettingManager')) {
+    console.error('❌ Unhandled promise rejection:', error.message);
+  }
 });
 
 // Function to create a client and set up event handlers
@@ -40,9 +43,16 @@ function createClient(token, index) {
     restRequestTimeout: 30000
   });
 
+  let isReady = false;
+
   client.on('ready', () => {
-    const accountName = client.user.tag;
-    console.log(`✅ Account ${index + 1} ready: ${accountName}`);
+    try {
+      isReady = true;
+      const accountName = client.user.tag;
+      console.log(`✅ Account ${index + 1} ready: ${accountName}`);
+    } catch (error) {
+      console.log(`✅ Account ${index + 1} ready (username fetch failed)`);
+    }
   });
 
   client.on('messageCreate', async (message) => {
@@ -74,8 +84,17 @@ function createClient(token, index) {
     const content = message.content || '*[No text content]*';
 
     // Get account info
-    const accountName = client.user.tag;
-    const accountAvatar = client.user.displayAvatarURL({ dynamic: true, size: 256 });
+    let accountName = `Account ${index + 1}`;
+    let accountAvatar = '';
+    
+    try {
+      if (client.user) {
+        accountName = client.user.tag;
+        accountAvatar = client.user.displayAvatarURL({ dynamic: true, size: 256 });
+      }
+    } catch (error) {
+      // Fallback if user info unavailable
+    }
 
     // Log the DM to console
     console.log('═'.repeat(60));
@@ -92,7 +111,7 @@ function createClient(token, index) {
     try {
       const embed = {
         title: `On ${accountName}`,
-        color: 0x5865F2, // Discord blurple color
+        color: 0x5865F2,
         fields: [
           {
             name: 'From',
@@ -105,14 +124,15 @@ function createClient(token, index) {
             inline: false
           }
         ],
-        thumbnail: {
-          url: accountAvatar
-        },
         timestamp: new Date().toISOString(),
         footer: {
           text: `Received at ${timestamp}`
         }
       };
+
+      if (accountAvatar) {
+        embed.thumbnail = { url: accountAvatar };
+      }
 
       // Add attachment info if present
       if (message.attachments.size > 0) {
@@ -177,7 +197,10 @@ TOKENS.forEach((token, index) => {
     const client = createClient(token, index);
     clients.push(client);
     
-    client.login(token).catch(error => {
+    console.log(`🔐 Logging in account ${index + 1}...`);
+    client.login(token).then(() => {
+      console.log(`✓ Account ${index + 1} login initiated`);
+    }).catch(error => {
       console.error(`❌ Failed to login account ${index + 1}:`, error.message);
     });
   } catch (error) {
@@ -198,3 +221,4 @@ process.on('SIGINT', async () => {
 });
 
 console.log('\n🔔 Monitoring DMs on all accounts...\n');
+console.log('💡 Tip: The bot is running. Accounts may log in even if "ready" messages don\'t appear.\n');

@@ -10,6 +10,9 @@ if (!TOKEN) {
   process.exit(1);
 }
 
+console.log('🔑 Token length:', TOKEN ? TOKEN.length : 0);
+console.log('🔑 Token starts with:', TOKEN ? TOKEN.substring(0, 10) + '...' : 'N/A');
+
 const client = new Client({ checkUpdate: false });
 
 // Test webhook first
@@ -79,6 +82,18 @@ client.on('messageCreate', async (message) => {
 
 client.on('error', (error) => {
   console.error('❌ Client error:', error.message);
+  console.error('❌ Error stack:', error.stack);
+});
+
+client.on('warn', (warning) => {
+  console.log('⚠️  Client warning:', warning);
+});
+
+client.on('debug', (info) => {
+  // Only log important debug info
+  if (info.includes('WS') || info.includes('Heartbeat') || info.includes('READY')) {
+    console.log('[DEBUG]', info);
+  }
 });
 
 process.on('unhandledRejection', (error) => {
@@ -89,12 +104,30 @@ process.on('unhandledRejection', (error) => {
     return;
   }
   console.error('❌ Unhandled rejection:', error.message);
+  if (error.stack) {
+    console.error('Stack:', error.stack);
+  }
 });
 
 console.log('🚀 Starting DM Monitor (Single Account Test)...\n');
 testWebhook();
 
-client.login(TOKEN).catch(error => {
-  console.error('❌ Login failed:', error.message);
-  process.exit(1);
-});
+console.log('🔐 Attempting to login...');
+client.login(TOKEN)
+  .then(() => {
+    console.log('✅ Login promise resolved');
+  })
+  .catch(error => {
+    console.error('❌ Login promise rejected:', error.message);
+    console.error('❌ Error code:', error.code);
+    console.error('❌ Full error:', error);
+    process.exit(1);
+  });
+
+// Timeout to check if ready event fires
+setTimeout(() => {
+  if (!client.user) {
+    console.log('\n⚠️  Warning: Client not ready after 10 seconds');
+    console.log('⚠️  Client status:', client.ws ? client.ws.status : 'No WS connection');
+  }
+}, 10000);

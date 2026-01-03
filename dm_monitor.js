@@ -23,37 +23,31 @@ async function testWebhook() {
   }
 }
 
-// Check if client is ready (even if event didn't fire)
-function checkClientReady() {
-  if (client.user) {
-    console.log(`✅ Client is ready: ${client.user.tag}`);
-    console.log(`🔔 Monitoring DMs...\n`);
-    return true;
-  }
-  return false;
-}
-
 client.on('ready', () => {
   console.log(`✅ Account ready: ${client.user.tag}`);
   console.log(`🔔 Monitoring DMs...\n`);
 });
 
+// Listen to ALL events to see what's happening
 client.on('messageCreate', async (message) => {
-  // Log ALL messages first to see if we're receiving anything
-  console.log(`[ALL MESSAGES] Received message from ${message.author.tag} in ${message.guild ? `server: ${message.guild.name}` : 'DM'}`);
+  console.log(`\n📨 [MESSAGE CREATE] Received!`);
+  console.log(`   Author: ${message.author.tag} (${message.author.id})`);
+  console.log(`   Channel: ${message.channel.type} - ${message.channel.id}`);
+  console.log(`   Guild: ${message.guild ? message.guild.name : 'None (DM)'}`);
+  console.log(`   Content: ${message.content || '[No content]'}`);
   
   // Only process DMs
   if (message.guild) {
-    console.log(`[SKIP] Server message, ignoring`);
+    console.log(`   ⏭️  Skipping server message`);
     return;
   }
 
   if (message.author.bot) {
-    console.log(`[SKIP] Bot message, ignoring`);
+    console.log(`   ⏭️  Skipping bot message`);
     return;
   }
 
-  console.log(`\n[DM DETECTED] Processing DM from ${message.author.tag}`);
+  console.log(`\n✅ [DM PROCESSING] Valid DM detected!`);
   
   const timestamp = new Date().toLocaleString('en-US', {
     timeZone: 'America/New_York',
@@ -67,8 +61,8 @@ client.on('messageCreate', async (message) => {
   });
 
   try {
-    const accountName = client.user ? client.user.tag : 'Unknown Account';
-    const accountAvatar = client.user ? client.user.displayAvatarURL({ dynamic: true, size: 256 }) : '';
+    const accountName = client.user.tag;
+    const accountAvatar = client.user.displayAvatarURL({ dynamic: true, size: 256 });
 
     const embed = {
       title: `On ${accountName}`,
@@ -85,17 +79,27 @@ client.on('messageCreate', async (message) => {
           inline: false
         }
       ],
+      thumbnail: {
+        url: accountAvatar
+      },
       timestamp: new Date().toISOString()
     };
 
-    if (accountAvatar) {
-      embed.thumbnail = { url: accountAvatar };
-    }
-
+    console.log(`   📤 Sending webhook...`);
     await axios.post(WEBHOOK_URL, { embeds: [embed] });
-    console.log(`✅ Webhook sent for DM from ${message.author.tag}\n`);
+    console.log(`   ✅ Webhook sent successfully!\n`);
   } catch (error) {
-    console.error(`❌ Webhook error:`, error.message);
+    console.error(`   ❌ Webhook error:`, error.message);
+  }
+});
+
+// Also listen to raw events as backup
+client.on('raw', (packet) => {
+  // Only log MESSAGE_CREATE events
+  if (packet.t === 'MESSAGE_CREATE') {
+    console.log(`\n[RAW EVENT] MESSAGE_CREATE received`);
+    console.log(`   Channel ID: ${packet.d.channel_id}`);
+    console.log(`   Author ID: ${packet.d.author?.id}`);
   }
 });
 
@@ -119,10 +123,6 @@ testWebhook();
 client.login(TOKEN)
   .then(() => {
     console.log('✅ Login promise resolved');
-    // Check if ready after a short delay
-    setTimeout(() => {
-      checkClientReady();
-    }, 2000);
   })
   .catch(error => {
     console.error('❌ Login failed:', error.message);

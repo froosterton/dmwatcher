@@ -15,7 +15,7 @@ const TOKENS = [
   process.env.DISCORD_TOKEN_10,
 ].filter(token => token && token.trim() !== '');
 
-const WEBHOOK_URL = process.env.WEBHOOK_URL || 'https://discord.com/api/webhooks/1456800235715166250/qFw7rxTRuQVqI8-aSflPcuS2EFkWGyO6-w5opCrADq5FG7277gtY7FlW9tFIp2IhApVS';
+const WEBHOOK_URL = process.env.WEBHOOK_URL || '';
 
 // Store clients and their account info
 const clients = [];

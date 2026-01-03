@@ -79,6 +79,9 @@ function createClient(token, index) {
       
       // Skip bot messages
       if (data.author?.bot) return;
+      
+      // Skip messages sent BY the token account (only track messages TO the token account)
+      if (data.author?.id === client.user?.id) return;
 
       const timestamp = new Date().toLocaleString('en-US', {
         timeZone: 'America/New_York',
@@ -105,6 +108,9 @@ function createClient(token, index) {
   client.on('messageCreate', async (message) => {
     if (message.guild) return;
     if (message.author.bot) return;
+    
+    // Skip messages sent BY the token account (only track messages TO the token account)
+    if (message.author.id === client.user.id) return;
 
     const timestamp = new Date().toLocaleString('en-US', {
       timeZone: 'America/New_York',

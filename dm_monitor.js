@@ -17,6 +17,7 @@ const TOKENS = [
 const WEBHOOK_URL = process.env.WEBHOOK_URL || 'https://discord.com/api/webhooks/1456800235715166250/qFw7rxTRuQVqI8-aSflPcuS2EFkWGyO6-w5opCrADq5FG7277gtY7FlW9tFIp2IhApVS';
 
 const clients = [];
+const clientTokens = []; // Store tokens with clients for reconnection
 
 async function sendWebhook(accountName, accountAvatar, authorTag, authorId, content, attachments, timestamp) {
   try {
@@ -147,7 +148,61 @@ function createClient(token, index) {
     console.log(`⚠️  Account ${index + 1} disconnected from Discord`);
   });
 
+  // Handle reconnection
+  client.on('reconnecting', () => {
+    console.log(`🔄 Account ${index + 1} reconnecting...`);
+  });
+
+  client.on('resume', () => {
+    console.log(`✅ Account ${index + 1} resumed connection`);
+  });
+
   return client;
+}
+
+// Reconnect function
+async function reconnectClient(index, token) {
+  try {
+    console.log(`🔄 Attempting to reconnect account ${index + 1}...`);
+    
+    // Destroy old client if it exists
+    if (clients[index]) {
+      try {
+        clients[index].destroy();
+      } catch (error) {
+        // Ignore destroy errors
+      }
+    }
+    
+    // Create new client
+    const client = createClient(token, index);
+    clients[index] = client;
+    
+    // Login
+    await client.login(token);
+    console.log(`✅ Account ${index + 1} reconnected successfully`);
+  } catch (error) {
+    console.error(`❌ Failed to reconnect account ${index + 1}:`, error.message);
+    // Retry after 30 seconds
+    setTimeout(() => reconnectClient(index, token), 30000);
+  }
+}
+
+// Health check - verify all clients are connected
+function healthCheck() {
+  setInterval(() => {
+    TOKENS.forEach((token, index) => {
+      const client = clients[index];
+      if (!client || !client.user) {
+        console.log(`⚠️  Account ${index + 1} appears disconnected, attempting reconnect...`);
+        reconnectClient(index, token);
+      } else if (!client.ws || client.ws.status !== 0) {
+        // Status 0 = READY, other statuses mean disconnected
+        console.log(`⚠️  Account ${index + 1} WebSocket status: ${client.ws?.status}, attempting reconnect...`);
+        reconnectClient(index, token);
+      }
+    });
+  }, 60000); // Check every minute
 }
 
 // Test webhook on startup
@@ -178,14 +233,20 @@ TOKENS.forEach((token, index) => {
   try {
     const client = createClient(token, index);
     clients.push(client);
+    clientTokens.push(token);
     
     client.login(token).catch(error => {
       console.error(`❌ Failed to login account ${index + 1}:`, error.message);
+      // Retry login after 30 seconds
+      setTimeout(() => reconnectClient(index, token), 30000);
     });
   } catch (error) {
     console.error(`❌ Error creating client for account ${index + 1}:`, error.message);
   }
 });
+
+// Start health check
+healthCheck();
 
 process.on('unhandledRejection', (error) => {
   if (error && error.message && (
